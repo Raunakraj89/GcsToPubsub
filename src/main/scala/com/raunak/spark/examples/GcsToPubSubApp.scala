@@ -1,47 +1,52 @@
 package com.raunak.spark.examples
 
+import com.raunak.spark.examples.GcsToPubSubAProcess.{StreamToPubSub, readToDf}
+import org.apache.commons.configuration.ConfigurationFactory
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
 
-  object GcsToPubSubApp extends App {
-    final val READ_FILE_PATH = "gs://qori-hadoop-test/film.csv"
-    final val WRITE_FILE_PATH = "gs://qori-hadoop-test/processed_films"
+  object GcsToPubSubApp {
+    def main(args: Array[String]) {
 
-    val spark = SparkSession
-      .builder()
-      .appName("gcs_test")
-      .getOrCreate()
+      val jobArgs = new MakenewclassJobArgs(args)
+      val confFile = jobArgs.conf.getOrElse("application.conf")
+      val rowConfig = ConfigurationFactory.load(confFile)
+      println("config file loaded")
 
-    spark.sparkContext.setLogLevel("WARN")
 
-    var df = spark.read
-      .option("header", true)
-      .option("delimiter", ";")
-      .csv(READ_FILE_PATH)
+      val spark = SparkSession
+        .builder()
+        .appName("gcsTopubsub")
+        .getOrCreate()
 
-    df.show(truncate = false, numRows = 20)
 
-    df = df
-      .withColumn("actor_split", split(col("Actor"), ","))
-      .withColumn("actress_split", split(col("Actress"), ","))
-      .withColumn("director_split", split(col("Director"), ","))
+      println("gcs to pubsub application started")
 
-    df = df
-      .withColumn("Actor", concat(col("actor_split")(1), lit(" "), col("actor_split")(0)))
-      .withColumn("Actress", concat(col("actress_split")(1), lit(" "), col("actress_split")(0)))
-      .withColumn("Director", concat(col("director_split")(1), lit(" "), col("director_split")(0)))
-      .drop("*Image", "actor_split", "actress_split", "director_split")
-      .na.drop()
-      .orderBy("Actor")
+      val df = readToDf
 
-    df.show(truncate = false, numRows = 20)
+      println("data read from gcs to df done")
 
-    df
-      .coalesce(1)
-      .write
-      .option("header", true)
-      .option("delimiter", "|")
-      .mode("overwrite")
-      .csv(WRITE_FILE_PATH)
+      StreamToPubSub(df)
+
+
+       val READ_FILE_PATH = "gs://qori-hadoop-test/film.csv"
+       val WRITE_FILE_PATH = "gs://qori-hadoop-test/processed_films"
+
+
+
+      spark.sparkContext.setLogLevel("WARN")
+
+
+
+      df
+        .coalesce(1)
+        .write
+        .option("header", true)
+        .option("delimiter", "|")
+        .mode("overwrite")
+        .csv(WRITE_FILE_PATH)
+    }
+
+
   }
